@@ -15,12 +15,13 @@ find_package(Qt6 REQUIRED COMPONENTS Sql)    # mysql
 find_package(Qt6 REQUIRED COMPONENTS Network)    # Network
 
 add_executable(poor_server
-  main.cpp
+    main.cpp
 
-  server/server_network.h server/server_network.cpp
+    server/server_network.h server/server_network.cpp
 
-  user/user_login_account_manager.h user/user_login_account_manager.cpp
+    user/user_login_account_manager.h user/user_login_account_manager.cpp
 
+    data/logs/logs.h data/logs/logs.cpp
 )
 target_link_libraries(poor_server PRIVATE Qt${QT_VERSION_MAJOR}::Core)
 target_link_libraries(poor_server PRIVATE Qt6::Sql) # mysql

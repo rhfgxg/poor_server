@@ -1,19 +1,11 @@
 #include <QCoreApplication>
 // 使用 shell 脚本
-#include <QProcess>
+//#include <QProcess>
 // 服务器相关
 #include "./server/server_network.h"
 // 数据库相关
-#include <QtSql>
-#include <QSqlDatabase>
-#include <QSqlQuery>
-#include <QSqlTableModel>
-#include <QSqlError>
-
-#include <QCoreApplication>
 #include <QtSql/QSqlDatabase>
 #include <QSqlError>
-#include "./server/server_network.h"
 
 void server_init(ServerNetwork &server);   // 服务器初始化
 void sql_link(QSqlDatabase &db);    // 数据库连接

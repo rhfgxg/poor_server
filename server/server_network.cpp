@@ -6,6 +6,7 @@
 ServerNetwork::ServerNetwork(QObject *parent) :
     QTcpServer(parent)
 {
+
 }
 
 void ServerNetwork::setDatabase(const QSqlDatabase &db)
@@ -35,12 +36,16 @@ void ServerNetwork::incomingConnection(qintptr socketDescriptor)
     connect(clientSocket, &QTcpSocket::disconnected, this, &ServerNetwork::onDisconnected);
 
     // 将连接的客户端，加入客户端列表
-    clients[clientSocket] = "";
+
+    qDebug("新客户端链接成功");
+    clients[clientSocket] = "user1";
 }
 
 // 读取服务器收到的数据
 void ServerNetwork::onReadyRead()
 {
+
+    qDebug("服务器收到数据");
     // 获取 发射信号激活此槽函数 的对象
     // 因为使用了一个列表管理连接的所有客户端，所以无法确定是那个客户端关联的tcp对象发射的信号
 
@@ -60,7 +65,7 @@ void ServerNetwork::onReadyRead()
     QString type = request["type"].toString();
     QJsonObject response;
 // 如果是登录
-    if (type == "login")
+    if (type == "LOGIN")
     {
         QString username = request["username"].toString();
         QString password = request["password"].toString();
@@ -102,6 +107,7 @@ void ServerNetwork::onReadyRead()
     clientSocket->write(responseDoc.toJson());  // 客户管理的发射函数
 }
 
+// 链接断开
 void ServerNetwork::onDisconnected()
 {
     // 获取 发射信号激活此槽函数 的对象

@@ -23,10 +23,14 @@ bool UserLoginAccountManager::validateUser(const QString &username, const QStrin
     }
 
     QSqlQuery query(database);
-    query.prepare("SELECT password_hash FROM users WHERE username = :username");
+    query.prepare("SELECT password FROM users WHERE username = :username");
     query.bindValue(":username", username);
+    // 在使用参数化查询时，SQL语句使用占位符来表示实际值。这里的 :username 是一个占位符，它将在执行查询时被替换为实际的值。
+    // 通过 query.bindValue(":username", username);，将变量 username 的值绑定到占位符 :username。
+    // 这意味着当查询被执行时，:username 将被替换为 username 的实际值。
+    // 防止SQL注入：参数化查询将用户输入作为数据处理，而不是直接插入到SQL语句中，从而避免了SQL注入攻击。
 
-    if (!query.exec())
+    if (!query.exec())  // 执行SQL查询, 返回bool，flash表示失败
     {
         qWarning() << "查询执行失败:" << query.lastError();
         return false;
