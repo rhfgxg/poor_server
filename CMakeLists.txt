@@ -22,6 +22,8 @@ add_executable(poor_server
     user/user_login_account_manager.h user/user_login_account_manager.cpp
 
     data/logs/logs.h data/logs/logs.cpp
+    data/user_uploads/useruploads.h data/user_uploads/useruploads.cpp
+
 )
 target_link_libraries(poor_server PRIVATE Qt${QT_VERSION_MAJOR}::Core)
 target_link_libraries(poor_server PRIVATE Qt6::Sql) # mysql

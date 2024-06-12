@@ -3,10 +3,12 @@
 
 #include <QTcpServer>
 #include <QTcpSocket>
-#include "../user/user_login_account_manager.h"
 #include <QSqlDatabase>
+#include "../user/user_login_account_manager.h" // 用户登录管理
+#include "../data/user_uploads/useruploads.h"   // 用户上传数据
 
 // 与客户端通信管理
+// 在此文件管理所有与客户端的交互，然后交给对象的对应功能进行处理
 class ServerNetwork : public QTcpServer
 {
     Q_OBJECT
@@ -24,6 +26,8 @@ private slots:
 
 private:
     UserLoginAccountManager userManager; // 用户登录管理
+    UserUploads useruploads;    // 图片上传管理
+
     QMap<QTcpSocket*, QString> clients; // 管理已经连接的客户端列表，客户端连接后，创建新的tcp指针，并保存在此map
 };
 

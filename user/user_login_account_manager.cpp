@@ -8,6 +8,7 @@ UserLoginAccountManager::UserLoginAccountManager(QObject *parent) :
 
 }
 
+// 初始化数据库
 void UserLoginAccountManager::setDatabase(const QSqlDatabase &db)
 {
     database = db;
@@ -70,7 +71,6 @@ bool UserLoginAccountManager::registerUser(const QString &username, const QStrin
 }
 
 // 记录登录日志
-// 传入用户名和ip
 bool UserLoginAccountManager::logLogin(const QString &username, const QString &ipAddress)
 {
     if (!database.isOpen())

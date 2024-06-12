@@ -44,11 +44,9 @@ void ServerNetwork::incomingConnection(qintptr socketDescriptor)
 // 读取服务器收到的数据
 void ServerNetwork::onReadyRead()
 {
-
     qDebug("服务器收到数据");
-    // 获取 发射信号激活此槽函数 的对象
+// 获取 发射信号激活此槽函数 的对象
     // 因为使用了一个列表管理连接的所有客户端，所以无法确定是那个客户端关联的tcp对象发射的信号
-
     // sender()：用于返回发出当前正在处理的信号的对象
     // qobject_cast<QTcpSocket>(sender()) 如果sender()返回的对象是一个（或派生自）QTcpSocket类型的对象，这个转换就会成功，并返回指向那个QTcpSocket对象的指针。
     QTcpSocket *clientSocket = qobject_cast<QTcpSocket*>(sender());
@@ -57,7 +55,8 @@ void ServerNetwork::onReadyRead()
         return;
     }
 
-    QByteArray data = clientSocket->readAll();  // 获取客户端发送的数据
+// 获取客户端发送的数据
+    QByteArray data = clientSocket->readAll();
     // 将一个包含JSON数据的 data解析成一个 QJsonDocument对象
     QJsonDocument requestDoc = QJsonDocument::fromJson(data);
     QJsonObject request = requestDoc.object();
@@ -67,12 +66,13 @@ void ServerNetwork::onReadyRead()
 // 如果是登录
     if (type == "LOGIN")
     {
+        response["type"] = "LOGIN";
         QString username = request["username"].toString();
         QString password = request["password"].toString();
 
         if (userManager.validateUser(username, password))
         {
-            response["status"] = "success";
+            response["status"] = "SUCCESS";
             response["message"] = "登录成功";
             // 获取客户端 IP 地址
             QString clientIp = clientSocket->peerAddress().toString();
@@ -80,27 +80,37 @@ void ServerNetwork::onReadyRead()
         }
         else
         {
-            response["status"] = "failure";
+            response["status"] = "FAILURE";
             response["message"] = "检查你的账号或密码";
         }
     }
 // 如果是注册
-    else if (type == "register")
+    else if (type == "RESISTER")
     {
+        response["type"] = "RESISTER";
         QString username = request["username"].toString();
         QString password = request["password"].toString();
         QString email = request["email"].toString();
 
         if (userManager.registerUser(username, password, email))
         {
-            response["status"] = "success";
+            response["status"] = "SUCCESS";
             response["message"] = "注册成功";
         }
         else
         {
-            response["status"] = "failure";
+            response["status"] = "FAILURE";
             response["message"] = "注册失败";
         }
+    }
+// 如果是图片
+    else if (type == "UPLOADS")
+    {
+        response["type"] = "UPLOADS";
+        QString filename = request["filename"].toString();
+        QString base64Data = request["filedata"].toString();
+        QString user_id = "";
+        useruploads.uploads(filename, base64Data, user_id);
     }
 
     QJsonDocument responseDoc(response);    // 将json对象转换回QJsonDocument对象，来方便发射数据
