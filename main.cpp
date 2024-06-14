@@ -17,8 +17,7 @@ int main(int argc, char *argv[])
     QSqlDatabase db = QSqlDatabase::addDatabase("QMYSQL");
     sql_link(db);
 
-    ServerNetwork server;
-    server.setDatabase(db);
+    ServerNetwork server(db);
     server_init(server);
 
     return a.exec();

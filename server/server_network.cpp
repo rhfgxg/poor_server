@@ -2,16 +2,14 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QDataStream>
+#include <QSqlError>
 
-ServerNetwork::ServerNetwork(QObject *parent) :
-    QTcpServer(parent)
+ServerNetwork::ServerNetwork(const QSqlDatabase &db, QObject *parent) :
+    QTcpServer(parent),
+    database(db),
+    userManager(db)
 {
 
-}
-
-void ServerNetwork::setDatabase(const QSqlDatabase &db)
-{
-    userManager.setDatabase(db);
 }
 
 // 传入的连接
@@ -38,7 +36,7 @@ void ServerNetwork::incomingConnection(qintptr socketDescriptor)
     // 将连接的客户端，加入客户端列表
 
     qDebug("新客户端链接成功");
-    clients[clientSocket] = "user1";
+    clients[clientSocket] = ""; // 备注置空
 }
 
 // 读取服务器收到的数据
@@ -63,8 +61,28 @@ void ServerNetwork::onReadyRead()
 
     QString type = request["type"].toString();
     QJsonObject response;
+// 如果是新的链接
+    if (type == "CONNECT")
+    {
+        QHostAddress client_ip = clientSocket->peerAddress();    // 获取客户端ip
+        QString client_ip_str = client_ip.toString();
+        QString client_id = request["client_id"].toString();    // 客户端id
+
+        for (auto it = clients.begin(); it != clients.end(); ++it)  // 遍历套接字，找到目标套接字后，添加客户端id作为备注
+        {
+            QTcpSocket* socket = it.key();
+            if (clientSocket == socket)
+            {
+                clients[socket] = client_id;
+                qDebug() << clients;
+            }
+        }
+
+        log_connect(client_id, client_ip_str); // 添加链接日志
+        return;
+    }
 // 如果是登录
-    if (type == "LOGIN")
+    else if (type == "LOGIN")
     {
         response["type"] = "LOGIN";
         QString username = request["username"].toString();
@@ -72,11 +90,13 @@ void ServerNetwork::onReadyRead()
 
         if (userManager.validateUser(username, password))
         {
-            response["status"] = "SUCCESS";
-            response["message"] = "登录成功";
             // 获取客户端 IP 地址
             QString clientIp = clientSocket->peerAddress().toString();
             userManager.logLogin(username, clientIp);
+            // 生成一个令牌，返回
+            // 令牌单次链接有效
+            response["status"] = "SUCCESS"; // 结果
+            response["message"] = "登录成功";
         }
         else
         {
@@ -130,3 +150,27 @@ void ServerNetwork::onDisconnected()
     }
 }
 
+void ServerNetwork::log_connect(QString client_id, QString client_ip)
+{
+    QDateTime connection_time = QDateTime::currentDateTime();   // 获取当前日期和时间的 QDateTime 对象
+    QString connection_time_str = connection_time.toString("yyyy-MM-dd HH:mm:ss");  // 时间转换成字符串
+
+    if (!database.isOpen())
+    {
+        qWarning() << "数据库未打开";
+        return;
+    }
+
+    QSqlQuery query(database);
+    query.prepare("INSERT INTO log_client_connection (client_user_id, connection_time, ip_address, status) VALUES (:client_id, :connection_time, :ip_address, :status)");
+    query.bindValue(":client_id", client_id);
+    query.bindValue(":connection_time", connection_time_str);
+    query.bindValue(":ip_address", client_ip);
+    query.bindValue(":status", "connected");
+
+    if (!query.exec())
+    {
+        qWarning() << "server/server_network：插入连接日志失败:" << query.lastError();
+        return;
+    }
+}

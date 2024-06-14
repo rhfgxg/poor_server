@@ -2,17 +2,13 @@
 #include <QSqlError>
 #include <QDebug>
 
-UserLoginAccountManager::UserLoginAccountManager(QObject *parent) :
-    QObject(parent)
+UserLoginAccountManager::UserLoginAccountManager(const QSqlDatabase &db, QObject *parent) :
+    QObject(parent),
+    database(db)
 {
 
 }
 
-// 初始化数据库
-void UserLoginAccountManager::setDatabase(const QSqlDatabase &db)
-{
-    database = db;
-}
 
 // 用户登录，验证用户信息
 bool UserLoginAccountManager::validateUser(const QString &username, const QString &password) const
