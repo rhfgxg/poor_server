@@ -3,6 +3,7 @@
 #include <QJsonObject>
 #include <QDataStream>
 #include <QSqlError>
+#include <QFile>
 
 ServerNetwork::ServerNetwork(const QSqlDatabase &db, QObject *parent) :
     QTcpServer(parent),
@@ -42,7 +43,6 @@ void ServerNetwork::incomingConnection(qintptr socketDescriptor)
 // 读取服务器收到的数据
 void ServerNetwork::onReadyRead()
 {
-    qDebug("服务器收到数据");
 // 获取 发射信号激活此槽函数 的对象
     // 因为使用了一个列表管理连接的所有客户端，所以无法确定是那个客户端关联的tcp对象发射的信号
     // sender()：用于返回发出当前正在处理的信号的对象
@@ -53,16 +53,21 @@ void ServerNetwork::onReadyRead()
         return;
     }
 
-// 获取客户端发送的数据
+// 获取并解析客户端发送的数据
     QByteArray data = clientSocket->readAll();
     // 将一个包含JSON数据的 data解析成一个 QJsonDocument对象
-    QJsonDocument requestDoc = QJsonDocument::fromJson(data);
-    QJsonObject request = requestDoc.object();
+    QJsonParseError parseError;
+    QJsonDocument requestDoc = QJsonDocument::fromJson(data, &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qDebug() << "JSON parse error:" << parseError.errorString();
+        return;
+    }
+    QJsonObject request = requestDoc.object();  // 解析成 json对象
 
-    QString type = request["type"].toString();
-    QJsonObject response;
+    QJsonObject response;   // 服务器响应数据
+
 // 如果是新的链接
-    if (type == "CONNECT")
+    if (request["type"].toString() == "CONNECT")
     {
         QHostAddress client_ip = clientSocket->peerAddress();    // 获取客户端ip
         QString client_ip_str = client_ip.toString();
@@ -74,7 +79,7 @@ void ServerNetwork::onReadyRead()
             if (clientSocket == socket)
             {
                 clients[socket] = client_id;
-                qDebug() << clients;
+                qDebug() << "新链接：" << clients;
             }
         }
 
@@ -82,7 +87,7 @@ void ServerNetwork::onReadyRead()
         return;
     }
 // 如果是登录
-    else if (type == "LOGIN")
+    else if (request["type"].toString() == "LOGIN")
     {
         response["type"] = "LOGIN";
         QString username = request["username"].toString();
@@ -105,7 +110,7 @@ void ServerNetwork::onReadyRead()
         }
     }
 // 如果是注册
-    else if (type == "RESISTER")
+    else if (request["type"].toString() == "RESISTER")
     {
         response["type"] = "RESISTER";
         QString username = request["username"].toString();
@@ -123,13 +128,16 @@ void ServerNetwork::onReadyRead()
             response["message"] = "注册失败";
         }
     }
-// 如果是图片
-    else if (type == "UPLOADS")
+// 如果是文件上传
+    else if (request["type"].toString() == "UPLOADS")
     {
         response["type"] = "UPLOADS";
-        QString filename = request["filename"].toString();
-        QString base64Data = request["filedata"].toString();
-        QString user_id = "";
+        QString filename = request["filename"].toString();  // 原始文件名
+        QString base64Data = request["filedata"].toString();    // 文件数据
+        QString user_id = "aaa";    // 用户id
+
+        qDebug() << filename << base64Data;
+
         useruploads.uploads(filename, base64Data, user_id);
     }
 
