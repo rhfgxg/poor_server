@@ -1,6 +1,7 @@
 #include "./server_network.h"
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonParseError>
 #include <QDataStream>
 #include <QSqlError>
 #include <QFile>
@@ -37,7 +38,7 @@ void ServerNetwork::incomingConnection(qintptr socketDescriptor)
     // 将连接的客户端，加入客户端列表
 
     qDebug("新客户端链接成功");
-    clients[clientSocket] = ""; // 备注置空
+    clients[clientSocket] = clientSocket->peerAddress().toString();; // 备注置空
 }
 
 // 读取服务器收到的数据
@@ -128,17 +129,29 @@ void ServerNetwork::onReadyRead()
             response["message"] = "注册失败";
         }
     }
-// 如果是文件上传
-    else if (request["type"].toString() == "UPLOADS")
+    // 如果的第一次上传文件
+    else if (request["type"].toString() == "INITIAL_UPLOAD")
     {
-        response["type"] = "UPLOADS";
-        QString filename = request["filename"].toString();  // 原始文件名
-        QString base64Data = request["filedata"].toString();    // 文件数据
-        QString user_id = "aaa";    // 用户id
+        response["type"] = "INITIAL_UPLOAD";
+        QString fileName = request["filename"].toString();
+        qint64 totalSize = request["totalSize"].toInt();
+        QString userId = request["userId"].toString();
+        QString clientId = request["clientId"].toString();
 
-        qDebug() << filename << base64Data;
+        QString file_id = useruploads.handleInitialUploadRequest(fileName, totalSize, userId, clientId);    // 返回生成的文件id
+        response["file_id"] = file_id;
+    }
+    // 如果是切片上传（断点续传）
+    else if (request["type"].toString() == "UPLOAD_CHUNK")
+    {
+        response["type"] = "UPLOAD_CHUNK";
+        QString file_id = request["file_id"].toString();  // 原始文件名
+        QString base64Data = request["filedata"].toString();    // 文件块数据
+        qint64 offset = request["offset"].toInt();  // 已发送文件大小
+        qint64 totalSize = request["totalSize"].toInt();    // 文件总大小
+        QString user_id = request["userId"].toString(); // 用户id
 
-        useruploads.uploads(filename, base64Data, user_id);
+        useruploads.uploadChunk(file_id, base64Data, offset, totalSize, user_id);  // 传递给处理函数
     }
 
     QJsonDocument responseDoc(response);    // 将json对象转换回QJsonDocument对象，来方便发射数据
