@@ -133,13 +133,14 @@ void ServerNetwork::onReadyRead()
     else if (request["type"].toString() == "INITIAL_UPLOAD")
     {
         response["type"] = "INITIAL_UPLOAD";
-        QString fileName = request["filename"].toString();
-        qint64 totalSize = request["totalSize"].toInt();
-        QString userId = request["userId"].toString();
-        QString clientId = request["clientId"].toString();
+        QString fileName = request["file_name"].toString();
+        qint64 totalSize = request["total_size"].toInt();
+        QString userId = request["user_id"].toString();
+        QString clientId = request["client_id"].toString();
 
         QString file_id = useruploads.handleInitialUploadRequest(fileName, totalSize, userId, clientId);    // 返回生成的文件id
         response["file_id"] = file_id;
+        response["file_path"] = request["file_path"].toString();    // 将文件路径间接返回给客户端
     }
     // 如果是切片上传（断点续传）
     else if (request["type"].toString() == "UPLOAD_CHUNK")

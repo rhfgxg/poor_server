@@ -171,9 +171,12 @@ QString UserUploads::handleInitialUploadRequest(const QString &file_name, qint64
     }
 
     QString file_id;
-    if (query.next()) {
+    if (query.next())
+    {
         file_id = query.value("file_id").toString();
-    } else {
+    }
+    else
+    {
         // 分配文件ID
         file_id = QUuid::createUuid().toString(QUuid::WithoutBraces);
 
@@ -182,7 +185,8 @@ QString UserUploads::handleInitialUploadRequest(const QString &file_name, qint64
         query.bindValue(":file_id", file_id);
         query.bindValue(":file_name", file_name);
         query.bindValue(":user_id", user_id);
-        if (!query.exec()) {
+        if (!query.exec())
+        {
             qDebug() << "创建文件记录失败:" << query.lastError();
             return "";
         }
@@ -191,7 +195,8 @@ QString UserUploads::handleInitialUploadRequest(const QString &file_name, qint64
         query.prepare("INSERT INTO upload_status_files (file_id, user_id, last_upload_time, missing_parts) VALUES (:file_id, :user_id, NULL, '')");
         query.bindValue(":file_id", file_id);
         query.bindValue(":user_id", user_id);
-        if (!query.exec()) {
+        if (!query.exec())
+        {
             qDebug() << "创建上传状态记录失败:" << query.lastError();
             return "";
         }
