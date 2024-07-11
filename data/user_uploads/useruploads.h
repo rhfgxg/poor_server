@@ -5,6 +5,7 @@
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QSqlError>
+#include <QJsonObject>
 
 class UserUploads : public QObject
 {
@@ -14,9 +15,10 @@ public:
     explicit UserUploads(QObject *parent = nullptr);
 
     void setDatabase(const QSqlDatabase &db);   // 初始化数据库
-    void uploadChunk(const QString &file_id, const QString &base64_data, qint64 offset, qint64 total_size, const QString &user_id);   // 处理切片上传文件
+    // 处理切片上传文件
+    QJsonObject uploadChunk(QJsonObject request);
     // 处理第一次上传的文件请求，返回生成的文件id
-    QString handleInitialUploadRequest(const QString &file_name, qint64 total_size, const QString &user_id, const QString &client_id);
+    QJsonObject handleInitialUploadRequest(QJsonObject request);
 
 private:
     // 每次上传切片时更新 upload_status_files 表中的相关信息，包括最近上传时间和缺失块信息

@@ -18,7 +18,7 @@ public:
     explicit ServerNetwork(const QSqlDatabase &db, QObject *parent = nullptr);
 
 protected:
-    void incomingConnection(qintptr socketDescriptor) override; // 传入的连接，override：显式重写基类的成员的标记
+    void incomingConnection(qintptr socket_descriptor) override; // 传入的连接，override：显式重写基类的成员的标记
 
 private slots:
     void onReadyRead(); // 准备读取数据
@@ -27,8 +27,8 @@ private slots:
 private:
     void log_connect(QString client_id, QString client_ip); // 添加客户端连接日志
 
-    UserLoginAccountManager userManager; // 用户登录管理
-    UserUploads useruploads;    // 图片上传管理
+    UserLoginAccountManager user_manager; // 用户登录管理
+    UserUploads user_uploads;    // 文件上传管理
 
     QSqlDatabase database;   // MySQL 数据库连接
 
