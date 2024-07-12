@@ -51,6 +51,7 @@ void ServerNetwork::onReadyRead()
   * 接收的数据：根据数据类型，将 json数据包 转发对应执行函数
   * 响应数据：接收执行函数返回的 json数据包，进行序列化后发送给客户端
   */
+    qDebug("服务端收到消息");
     // 获取 发射信号激活此槽函数 的对象
     QTcpSocket *client_socket = qobject_cast<QTcpSocket*>(sender());
     /* 因为使用了一个列表管理连接的所有客户端，所以无法确定是那个客户端关联的tcp对象发射的信号
@@ -119,7 +120,6 @@ void ServerNetwork::onReadyRead()
     // 如果是切片上传（断点续传）
     else if (request["type"].toString() == "UPLOAD_CHUNK")
     {
-
         response = user_uploads.handleInitialUploadRequest(request);  // 由具体函数执行，返回响应数据
         return; // 执行数量过多，出于网络数据包考虑，不进行响应
     }

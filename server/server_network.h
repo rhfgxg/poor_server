@@ -31,7 +31,6 @@ private:
     UserUploads user_uploads;    // 文件上传管理
 
     QSqlDatabase database;   // MySQL 数据库连接
-
     QMap<QTcpSocket*, QString> clients; // 管理已经连接的客户端列表，客户端连接后，创建新的tcp指针，并保存在此map
 };
 

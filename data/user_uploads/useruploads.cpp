@@ -69,7 +69,7 @@ QJsonObject UserUploads::handleInitialUploadRequest(QJsonObject request)
     // 分配文件ID
     file_id = QUuid::createUuid().toString(QUuid::WithoutBraces);
 
-    // 在文件上传表，创建文件上传记录
+    // 在文件上传表，创建文件记录
     query.prepare("INSERT INTO completed_files (file_id, file_name, user_id, file_status, upload_time) VALUES (:file_id, :file_name, :user_id, 'uploading', NULL)");
     query.bindValue(":file_id", file_id);
     query.bindValue(":file_name", file_name);
