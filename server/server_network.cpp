@@ -32,7 +32,6 @@ void ServerNetwork::incomingConnection(qintptr socket_descriptor)
         // 如果设置失败，释放这个对象，并结束函数
         delete client_socket;
         return;
-
     }
 
     // 服务器接收到数据
@@ -42,7 +41,7 @@ void ServerNetwork::incomingConnection(qintptr socket_descriptor)
 
     // 将连接的客户端，加入客户端列表
     qDebug("新客户端链接成功");
-    clients[client_socket] = client_socket->peerAddress().toString();; // 备注：获取连接到此客户端套接字（即远程客户端）的 IP 地址
+    clients[client_socket] = ""; // 备注：获取连接到此客户端套接字（即远程客户端）的 IP 地址
 }
 
 // 读取服务器收到的数据
@@ -82,20 +81,18 @@ void ServerNetwork::onReadyRead()
     if (request["type"].toString() == "CONNECT")
     {// todo：暂时由此函数执行，后续考虑由日志类处理，或转发 同类的log_connect函数
         QHostAddress client_ip = client_socket->peerAddress();    // 获取客户端ip
-        QString client_ip_str = client_ip.toString();
+        QString client_ip_str = client_ip.toString();   // 将ip转QString
         QString client_id = request["client_id"].toString();    // 客户端id
 
         for (auto it = clients.begin(); it != clients.end(); ++it)  // 遍历套接字，找到目标套接字后，添加客户端id作为备注
         {
-            QTcpSocket* socket = it.key();
+            QTcpSocket* socket = it.key();  // 获取客户端链接列表的 键值对 的键：链接客户端的套接字
             if (client_socket == socket)
             {
-                clients[socket] = client_id;
-                qDebug() << "新链接：" << clients;
+                clients[socket] = client_id;    // 添加客户端id作为备注
             }
         }
-
-        log_connect(client_id, client_ip_str); // 添加链接日志
+        log_client_connect(client_id, client_ip_str, "connected"); // 添加链接日志
         return; // 无响应数据
     }
 // 如果是登录
@@ -134,20 +131,33 @@ void ServerNetwork::onReadyRead()
 void ServerNetwork::onDisconnected()
 {
     // 获取 发射信号激活此槽函数 的对象
-    QTcpSocket *clientSocket = qobject_cast<QTcpSocket*>(sender());
+    QTcpSocket *client_socket = qobject_cast<QTcpSocket*>(sender());
 
-    if (clientSocket)
+    if (client_socket)
     {
-        clients.remove(clientSocket);   // 清理列表中的客户端
-        clientSocket->deleteLater();    // 对象会在当前执行的代码块结束后，以及任何待处理的事件（如已排队的信号和槽）处理完毕后，适时被删除
+        QString client_ip_str = client_socket->peerAddress().toString();   // 获取客户端ip转QString
+
+        QString client_id;  // 客户端ID
+        for (auto it = clients.begin(); it != clients.end(); ++it)  // 遍历套接字列表，找到目标套接字后，获取备注的客户端id
+        {
+            QTcpSocket* socket = it.key();  // 获取客户端链接列表的 键值对 的键：链接客户端的套接字
+            if (client_socket == socket)
+            {
+                client_id = clients[socket];    // 添加客户端id作为备注
+            }
+        }
+
+        log_client_connect(client_id, client_ip_str, "disconnected"); // 添加链接日志：断开
+
+        clients.remove(client_socket);   // 清理列表中的客户端
+        client_socket->deleteLater();    // 对象会在当前执行的代码块结束后，以及任何待处理的事件（如已排队的信号和槽）处理完毕后，适时被删除
     }
 }
 
 // 客户端链接日志
-void ServerNetwork::log_connect(QString client_id, QString client_ip)
+void ServerNetwork::log_client_connect(QString client_id, QString client_ip, QString status)
 {
-    QDateTime connection_time = QDateTime::currentDateTime();   // 获取当前日期和时间的 QDateTime 对象
-    QString connection_time_str = connection_time.toString("yyyy-MM-dd HH:mm:ss");  // 时间转换成字符串
+    QString now_time = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");  // 获取当前日期和时间转换成字符串
 
     if (!database.isOpen())
     {
@@ -156,11 +166,11 @@ void ServerNetwork::log_connect(QString client_id, QString client_ip)
     }
 
     QSqlQuery query(database);
-    query.prepare("INSERT INTO log_client_connection (client_user_id, connection_time, ip_address, status) VALUES (:client_id, :connection_time, :ip_address, :status)");
+    query.prepare("INSERT INTO log_client_connection (client_id, now_time, ip_address, status) VALUES (:client_id, :now_time, :ip_address, :status)");
     query.bindValue(":client_id", client_id);
-    query.bindValue(":connection_time", connection_time_str);
+    query.bindValue(":now_time", now_time);
     query.bindValue(":ip_address", client_ip);
-    query.bindValue(":status", "connected");
+    query.bindValue(":status", status);
 
     if (!query.exec())
     {

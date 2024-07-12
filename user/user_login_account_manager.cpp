@@ -14,8 +14,9 @@ UserLoginAccountManager::UserLoginAccountManager(const QSqlDatabase &db, QObject
 // 用户登录，验证用户信息
 QJsonObject UserLoginAccountManager::validateUser(QJsonObject request, QString client_ip)
 {// todo 如果用户未注册，自动进行注册
-    QString username = request["username"].toString();
+    QString account = request["account"].toString();
     QString password = request["password"].toString();
+    QString client_id = request["client_id"].toString();
 
     QJsonObject response;   // 响应数据
     response["type"] = "LOGIN"; // 响应数据类型
@@ -31,8 +32,8 @@ QJsonObject UserLoginAccountManager::validateUser(QJsonObject request, QString c
     }
 
     QSqlQuery query(database);
-    query.prepare("SELECT password FROM users WHERE username = :username");
-    query.bindValue(":username", username);
+    query.prepare("SELECT password FROM users WHERE account = :account");
+    query.bindValue(":account", account);
     /* 在使用参数化查询时，SQL语句使用占位符来表示实际值。这里的 :username 是一个占位符，它将在执行查询时被替换为实际的值。
      * 通过 query.bindValue(":username", username);，将变量 username 的值绑定到占位符 :username。
      * 这意味着当查询被执行时，:username 将被替换为 username 的实际值。
@@ -40,37 +41,42 @@ QJsonObject UserLoginAccountManager::validateUser(QJsonObject request, QString c
      */
 
     if (!query.exec())  // 执行SQL查询
-    {
+    {/*语法执行出错：格式，权限，语法等*/
         qWarning() << "查询执行失败:" << query.lastError();
+
         response["status"] = "FAILURE"; // 登录失败
         response["message"] = "检查你的账号或密码";
-
         return response;
     }
 
-    if (query.next())
-    {
-        QString storedPassword = query.value(0).toString();
-        if(storedPassword == password) // 比较用户数据
-        {
-            response["status"] = "FAILURE"; // 登录失败
-            response["message"] = "检查你的账号或密码";
+    if (query.next())   // 返回值：查询结果中是否有更多的行可读取
+    {/* next作用
+      * 遍历查出的多行数据
+      * 初始指向第一行数据前一位，
+      * 每次调用 next，query指向下一行
+      * 遍历所有行需要循环使用
+      * 当没有下一行时，next返回flash
+      */
+        if(query.value(0).toString() == password) // 比较用户数据
+        {/*如果找到数据*/
+            QString user_id = query.value(0).toString();    // 记录用户ID和客户端id，用来添加日志
+
+            logLogin(user_id, client_id);    // 添加到用户登录日志
+
+            // todo：生成一个令牌，返回
+            // 令牌单次链接有效
+            QString tooken;
+
+            response["status"] = "SUCCESS"; // 登录成功
+            response["message"] = "登录成功";// 登录提示
+            response["tooken"] = tooken;    // 令牌
+            response["user_id"] = user_id;  // 用户ID
             return response;
         }
     }
 
-    QString user_id = query.value(0).toString();    // 记录用户ID，用来添加日志
-
-    logLogin(user_id, client_ip);    // 添加到用户登录日志
-
-    // todo：生成一个令牌，返回
-    // 令牌单次链接有效
-    QString tooken;
-
-    response["status"] = "SUCCESS"; // 登录成功
-    response["message"] = "登录成功";// 登录提示
-    response["tooken"] = tooken;    // 令牌
-    response["user_id"] = user_id;  // 用户ID
+    response["status"] = "FAILURE"; // 登录失败
+    response["message"] = "检查你的账号或密码";
     return response;
 }
 

@@ -25,7 +25,7 @@ private slots:
     void onDisconnected();  // 关闭连接
 
 private:
-    void log_connect(QString client_id, QString client_ip); // 添加客户端连接日志
+    void log_client_connect(QString client_id, QString client_ip, QString status); // 添加客户端日志：链接或断开，参数：客户端ID，客户端IP，状态（链接或断开）
 
     UserLoginAccountManager user_manager; // 用户登录管理
     UserUploads user_uploads;    // 文件上传管理
