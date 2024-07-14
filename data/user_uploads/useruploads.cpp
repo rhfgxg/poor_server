@@ -195,7 +195,6 @@ QJsonObject UserUploads::uploadChunk(QJsonObject request)
   * 函数返回的数据不会响应给客户端：本函数执行过于频繁，每一条都响应会增加网络负担
   * 客户端获取文件上传状态：使用心跳机制（另一个函数）查询文件上传状态
   */
-    qDebug("文件切片");
     QJsonObject response;   // 相应数据
     response["type"] = "UPLOAD_CHUNK";  // 响应数据类型
     QString file_id = request["file_id"].toString();    // 文件ID

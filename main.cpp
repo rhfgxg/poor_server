@@ -30,8 +30,6 @@ void server_init(ServerNetwork &server)
         qCritical() << "启动服务器失败:" << server.errorString();
         exit(1);
     }
-
-    qDebug() << "服务器监听的端口：" << server.serverPort();
 }
 
 void sql_link(QSqlDatabase &db)
@@ -46,10 +44,6 @@ void sql_link(QSqlDatabase &db)
     {
         qDebug()<< "数据库打开失败："<<db.lastError().text();
         exit(1);
-    }
-    else
-    {
-        qDebug() << "数据库打开成功";
     }
 }
 

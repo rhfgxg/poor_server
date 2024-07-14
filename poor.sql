@@ -4,6 +4,8 @@ SHOW TABLES;	-- 查看可用表
 
 DROP table completed_files;	-- 删除表
 
+DELETE FROM completed_files;	-- 删除表内所有数据
+
 SELECT * from completed_files;	-- 查看表内数据
 
 INSERT INTO users (username, password_hash, email) VALUES	-- 插入数据
