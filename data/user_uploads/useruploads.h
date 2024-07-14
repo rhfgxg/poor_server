@@ -12,7 +12,7 @@ class UserUploads : public QObject
     Q_OBJECT
 
 public:
-    explicit UserUploads(QObject *parent = nullptr);
+    explicit UserUploads(const QSqlDatabase &db, QObject *parent = nullptr);
 
     void setDatabase(const QSqlDatabase &db);   // 初始化数据库
     // 处理切片上传文件

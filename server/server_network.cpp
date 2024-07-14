@@ -9,7 +9,8 @@
 ServerNetwork::ServerNetwork(const QSqlDatabase &db, QObject *parent) :
     QTcpServer(parent),
     database(db),
-    user_manager(db)
+    user_manager(db),
+    user_uploads(db)
 {
 
 }
@@ -157,6 +158,7 @@ void ServerNetwork::onDisconnected()
 // 客户端链接日志
 void ServerNetwork::log_client_connect(QString client_id, QString client_ip, QString status)
 {
+    qDebug("客户端链接日志");
     QString now_time = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");  // 获取当前日期和时间转换成字符串
 
     if (!database.isOpen())

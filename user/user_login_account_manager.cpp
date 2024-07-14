@@ -4,9 +4,9 @@
 #include <QJsonObject>
 #include <QRandomGenerator>
 
-UserLoginAccountManager::UserLoginAccountManager(const QSqlDatabase &db, QObject *parent) :
-    QObject(parent),
-    database(db)
+UserLoginAccountManager::UserLoginAccountManager(const QSqlDatabase &db, QObject *parent) :    
+    database(db),
+    QObject(parent)
 {
 
 }
