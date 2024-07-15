@@ -22,9 +22,9 @@ public:
 
 private:
     // 每次上传切片时更新 upload_status_files 表中的相关信息，包括最近上传时间和缺失块信息
-    void updateUploadStatus(const QString &file_id, qint64 offset, qint64 bytesWritten, qint64 total_size, const QString &user_id, const QString &savePath);
+    void updateUploadStatus(const QString &file_id, qint64 offset, qint64 bytesWritten, qint64 file_size, const QString &account, const QString &actual_file_path);
     // 检查文件是否完整上传
-    void checkFileCompletion(const QString &file_id, qint64 total_size, const QString &user_id, const QString &savePath);
+    void checkFileCompletion(const QString &file_id, qint64 file_size, const QString &account, const QString &actual_file_path);
 
     QSqlDatabase database;   // MySQL 数据库连接
 };

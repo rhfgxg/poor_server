@@ -35,7 +35,8 @@ QJsonObject UserUploads::handleInitialUploadRequest(QJsonObject request)
     QDateTime currentDateTime = QDateTime::currentDateTime();
     QString upload_time = currentDateTime.toString("yyyy-MM-dd HH:mm:ss");   // 文件上传时间
 
-    int totalBlocks = (file_size + (1024*1024) - 1) / (1024*1024); // 文件总块数
+    const qint64 chunk_size = 1024 * 30; // 每个切片30kb：经过测试，在目前，30kb可以保持一个稳定的传输质量，切片传输时不会出现json解析异常
+    int totalBlocks = (file_size + chunk_size - 1) / chunk_size; // 文件总块数
     QString missing_parts;  // 缺失文件块下标列表：保存数字0 1 2 3 n，使用空格分开，0表示第一块，乘切片大小得到偏移量
     for (int i = 0; i < totalBlocks; ++i)
     {
@@ -137,6 +138,10 @@ QJsonObject UserUploads::handleInitialUploadRequest(QJsonObject request)
     {
         file_new_name =  file_name + "(" + QString::number(max_suffix + 1) + ")";
     }
+    else
+    {
+        file_new_name = file_name;
+    }
 
     // 在 文件表，创建新的文件数据
     query.clear();  // 重置查询对象
@@ -195,17 +200,17 @@ QJsonObject UserUploads::uploadChunk(QJsonObject request)
   * 函数返回的数据不会响应给客户端：本函数执行过于频繁，每一条都响应会增加网络负担
   * 客户端获取文件上传状态：使用心跳机制（另一个函数）查询文件上传状态
   */
-    QJsonObject response;   // 相应数据
+    QJsonObject response;   // 响应数据
     response["type"] = "UPLOAD_CHUNK";  // 响应数据类型
+
     QString file_id = request["file_id"].toString();    // 文件ID
-    QString base64_data = request["filedata"].toString();    // 文件块数据
+    QString base64_data = request["file_data"].toString();    // 文件块数据
     QByteArray file_data = QByteArray::fromBase64(base64_data.toUtf8());    // 解码 base64数据
     qint64 offset = request["offset"].toInt();  // 文件块偏移量
 
     // 使用文件ID，查询需要的信息
     QSqlQuery query(database);
-    // 准备查询语句
-    query.prepare("SELECT user_id, total_size, actual_file_path FROM completed_files WHERE file_id = :file_id");
+    query.prepare("SELECT account, file_size, actual_file_path FROM completed_files WHERE file_id = :file_id");
     query.bindValue(":file_id", file_id);
 
     if (!query.exec())
@@ -223,15 +228,15 @@ QJsonObject UserUploads::uploadChunk(QJsonObject request)
         return response;
     }
 
-    QString user_id = query.value("user_id").toString(); // 用户ID
-    qint64 total_size = query.value("total_size").toInt(); // 文件大小
-    QString savePath = query.value("actual_file_path").toString(); // 文件保存路径
+    QString account = query.value("account").toString(); // 用户账号
+    qint64 file_size = query.value("file_size").toInt(); // 文件大小
+    QString actual_file_path = query.value("actual_file_path").toString(); // 文件保存路径
 
     // 打开文件，如果文件不存在就结束
-    QFile file(savePath);
+    QFile file(actual_file_path);
     if (!file.open(QIODevice::WriteOnly))
     {
-        qDebug() << "文件上传：文件打开失败:" << savePath;
+        qDebug() << "文件上传：文件打开失败:";
 //        response["status"] = "FAILURE"; // 任务创建失败
 //        response["message"] = "服务端数据库查询同名文件失败，请稍候重试";
         return response;
@@ -240,7 +245,7 @@ QJsonObject UserUploads::uploadChunk(QJsonObject request)
     // 定位偏移量
     if (!file.seek(offset))
     {
-        qDebug() << "文件上传：文件数据偏移定位失败:" << savePath;
+        qDebug() << "文件上传：文件数据偏移定位失败:";
 //        response["status"] = "FAILURE"; // 任务创建失败
 //        response["message"] = "服务端数据库查询同名文件失败，请稍候重试";
         return response;
@@ -251,12 +256,12 @@ QJsonObject UserUploads::uploadChunk(QJsonObject request)
 
     if (bytesWritten == -1)
     {
-        qDebug() << "写入文件失败:" << savePath;
+        qDebug() << "写入文件失败:" << actual_file_path;
     }
     else
     {
-        qDebug() << "文件切片保存成功:" << savePath << ", 字节写入:" << bytesWritten;
-        updateUploadStatus(file_id, offset, bytesWritten, total_size, user_id, savePath);
+        qDebug() << "文件切片保存成功:, 字节写入:" << bytesWritten;
+        updateUploadStatus(file_id, offset, bytesWritten, file_size, account, actual_file_path);
     }
 
     // 返回的数据被抛弃，仅是为了格式统一
@@ -266,7 +271,7 @@ QJsonObject UserUploads::uploadChunk(QJsonObject request)
 }
 
 // 每次上传切片时更新 upload_status_files 表中的相关信息，包括最近上传时间和缺失块信息
-void UserUploads::updateUploadStatus(const QString &file_id, qint64 offset, qint64 bytesWritten, qint64 total_size, const QString &user_id, const QString &savePath)
+void UserUploads::updateUploadStatus(const QString &file_id, qint64 offset, qint64 bytesWritten, qint64 file_size, const QString &account, const QString &actual_file_path)
 {
     if (!database.isOpen())
     {
@@ -274,23 +279,23 @@ void UserUploads::updateUploadStatus(const QString &file_id, qint64 offset, qint
         return;
     }
 
-    QSqlQuery query(database);
-
-    query.prepare("UPDATE upload_status_files SET last_upload_time = :last_upload_time, missing_parts = :missing_parts WHERE file_name = :file_name AND user_id = :user_id");
-    query.bindValue(":last_upload_time", QDateTime::currentDateTime());
-    query.bindValue(":file_name", file_id);
-    query.bindValue(":user_id", user_id);
-
     QString missingParts;
-    if (offset + bytesWritten < total_size)
+    if (offset + bytesWritten < file_size)
     {
-        missingParts = QString("%1 %2").arg(offset + bytesWritten + 1).arg(total_size - 1);
+        missingParts = QString("%1 %2").arg(offset + bytesWritten + 1).arg(file_size - 1);
     }
     else
     {
         missingParts = "";
     }
-    query.bindValue(":missing_parts", missingParts);
+
+    QSqlQuery query(database);
+
+    query.prepare("UPDATE upload_status_files SET last_upload_time = :last_upload_time, missing_parts = :missing_parts WHERE file_id = :file_id AND account = :account");
+    query.bindValue(":file_id", file_id);   // 文件ID
+    query.bindValue(":account", account);   // 用户账号
+    query.bindValue(":last_upload_time", QDateTime::currentDateTime()); // 更新上传时间
+    query.bindValue(":missing_parts", missingParts);    // 更新上传的文件块
 
     if (!query.exec())
     {
@@ -298,11 +303,11 @@ void UserUploads::updateUploadStatus(const QString &file_id, qint64 offset, qint
         return;
     }
 
-    checkFileCompletion(file_id, total_size, user_id, savePath);
+    checkFileCompletion(file_id, file_size, account, actual_file_path);
 }
 
 // 检查文件是否完整上传
-void UserUploads::checkFileCompletion(const QString &file_id, qint64 total_size, const QString &user_id, const QString &savePath)
+void UserUploads::checkFileCompletion(const QString &file_id, qint64 file_size, const QString &account, const QString &actual_file_path)
 {
     if (!database.isOpen())
     {
@@ -311,10 +316,9 @@ void UserUploads::checkFileCompletion(const QString &file_id, qint64 total_size,
     }
 
     QSqlQuery query(database);
-
-    query.prepare("SELECT missing_parts FROM upload_status_files WHERE file_name = :file_name AND user_id = :user_id");
-    query.bindValue(":file_id", file_id);
-    query.bindValue(":user_id", user_id);
+    query.prepare("SELECT missing_parts FROM upload_status_files WHERE file_id = :file_id AND account = :account");
+    query.bindValue(":file_id", file_id);   // 文件ID
+    query.bindValue(":account", account);   // 用户账号
 
     if (!query.exec())
     {
@@ -324,15 +328,15 @@ void UserUploads::checkFileCompletion(const QString &file_id, qint64 total_size,
 
     if (query.next())
     {
-        QString missingParts = query.value("missing_parts").toString();
+        QString missingParts = query.value("missing_parts").toString(); // 获取当前缺失文件块列表
 
         if (missingParts.isEmpty())
         {
-            query.prepare("UPDATE completed_files SET file_status = 'normal', actual_file_path = :actual_file_path, upload_time = :upload_time WHERE file_name = :file_name AND user_id = :user_id");
-            query.bindValue(":actual_file_path", savePath);
-            query.bindValue(":upload_time", QDateTime::currentDateTime());
-            query.bindValue(":file_id", file_id);
-            query.bindValue(":user_id", user_id);
+            query.clear();  // 重置查询状态
+            query.prepare("UPDATE completed_files SET file_status = :file_status WHERE file_id = :file_id AND account = :account");
+            query.bindValue(":file_id", file_id);   // 文件ID
+            query.bindValue(":account", account);   // 用户账号
+            query.bindValue(":file_status", "normal");   // 更新文件状态
 
             if (!query.exec())
             {
@@ -340,17 +344,17 @@ void UserUploads::checkFileCompletion(const QString &file_id, qint64 total_size,
                 return;
             }
 
-            query.prepare("DELETE FROM upload_status_files WHERE file_name = :file_name AND user_id = :user_id");
-            query.bindValue(":file_id", file_id);
-            query.bindValue(":user_id", user_id);
+            query.clear();  // 重置查询
+            query.prepare("DELETE FROM upload_status_files WHERE file_id = :file_id AND account = :account");
+            query.bindValue(":file_id", file_id);   // 文件ID
+            query.bindValue(":account", account);   // 用户账号
 
             if (!query.exec())
             {
                 qDebug() << "删除上传状态失败:" << query.lastError();
                 return;
             }
-
-            qDebug() << "文件已完整上传，更新状态并删除上传记录:" << savePath;
+            qDebug() << "文件已完整上传";
         }
     }
 }

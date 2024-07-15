@@ -4,9 +4,9 @@ SHOW TABLES;	-- 查看可用表
 
 DROP table completed_files;	-- 删除表
 
-DELETE FROM completed_files;	-- 删除表内所有数据
+DELETE FROM upload_status_files;	-- 删除表内所有数据
 
-SELECT * from completed_files;	-- 查看表内数据
+SELECT * from upload_status_files;	-- 查看表内数据
 
 INSERT INTO users (username, password_hash, email) VALUES	-- 插入数据
 (`123`, `123`, `123`);
@@ -85,7 +85,7 @@ CREATE TABLE `completed_files` (
     `upload_time` 	TIMESTAMP DEFAULT CURRENT_TIMESTAMP,	-- 上传时间：以第一次上传时间为准
     `actual_file_path` VARCHAR(255) NOT NULL,		-- 文件在服务端保存路径（含文件名）
     `client_display_path` VARCHAR(255),			-- 客户端展示路径（含文件名）
-    `file_status` 	ENUM('uploading', 'upload_failed', 'normal', 'deleted', 'blocked', 'corrupted', 'lost'),	-- 状态可以是 正常'normal', 删除'deleted', 被屏蔽'blocked', 损坏'corrupted', 丢失'missing'
+    `file_status` 	ENUM('uploading', 'upload_failed', 'normal', 'deleted', 'blocked', 'corrupted', 'lost'),	-- 状态可以是上传中‘uploading’，上传失败’upload_failed‘，正常'normal', 删除'deleted', 被屏蔽'blocked', 损坏'corrupted', 丢失'lost'
 	
     PRIMARY KEY (`file_id`),	-- 主键
 

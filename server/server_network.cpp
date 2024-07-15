@@ -71,10 +71,13 @@ void ServerNetwork::onReadyRead()
     // 将一个包含JSON数据的 data解析成一个 QJsonDocument对象
     QJsonParseError parse_error;
     QJsonDocument request_doc = QJsonDocument::fromJson(data, &parse_error);
-    if (parse_error.error != QJsonParseError::NoError) {
-        qDebug() << "服务端接收的JSON数据解析失败:" << parse_error.errorString();
+
+    if (parse_error.error != QJsonParseError::NoError)
+    {
+        qDebug() << "服务端套接字：上传数据的 JSON数据解析失败:" << parse_error.errorString();
         return;
     }
+
     QJsonObject request = request_doc.object();  // 接收的数据 解析成 json对象
     QJsonObject response;   // 服务端响应给客户端的数据
 
