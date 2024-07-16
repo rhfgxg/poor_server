@@ -70,6 +70,9 @@ void ServerNetwork::onReadyRead()
     QByteArray data = client_socket->readAll();
     Packet request = Packet::fromByteArray(data);
 
+    qDebug() << "收到的数据:" << data;
+    qDebug() << "解析后的请求类型:" << static_cast<int>(request.getType());
+
     // 服务端响应给客户端的数据
     Packet response;
 
@@ -99,6 +102,7 @@ void ServerNetwork::onReadyRead()
         QJsonObject response_json = user_manager.validateUser(request.getJsonData(), client_ip);  // 由具体函数执行，返回响应数据
         response.setType(PacketType::LOGIN);    // 设置数据头
         response.setJsonData(response_json);    // 设置 json子数据包
+        client_socket->write(response.toByteArray());  // 序列化后发射给客户端
     }
 // 如果是注册
     else if (request.getType() == PacketType::RESISTER)
@@ -106,26 +110,29 @@ void ServerNetwork::onReadyRead()
         QString client_ip = client_socket->peerAddress().toString();
 
         QJsonObject response_json = user_manager.registerUser(request.getJsonData(), client_ip);  // 由具体函数执行，返回响应数据
-        response.setType(PacketType::LOGIN);    // 设置数据头
+        response.setType(PacketType::RESISTER);    // 设置数据头
         response.setJsonData(response_json);    // 设置 json子数据包
+        client_socket->write(response.toByteArray());  // 序列化后发射给客户端
     }
 //// 如果的第一次上传文件
     else if (request.getType() == PacketType::INITIAL_UPLOAD)
     {
         QJsonObject response_json = user_uploads.handleInitialUploadRequest(request.getJsonData());  // 由具体函数执行，返回响应数据
-        response.setType(PacketType::LOGIN);    // 设置数据头
+        response.setType(PacketType::INITIAL_UPLOAD);    // 设置数据头
         response.setJsonData(response_json);    // 设置 json子数据包
+        client_socket->write(response.toByteArray());  // 序列化后发射给客户端
     }
 //    // 如果是切片上传（断点续传）
     else if (request.getType() == PacketType::UPLOAD_CHUNK)
     {
-        QJsonObject response_json = user_uploads.uploadChunk(request.getJsonData());  // 由具体函数执行，返回响应数据
-        response.setType(PacketType::LOGIN);    // 设置数据头
-        response.setJsonData(response_json);    // 设置 json子数据包
+        qDebug("文件切片");
+        // 传入json数据包和文件数据
+        QJsonObject response_json = user_uploads.uploadChunk(request.getJsonData(), request.getFileData());  // 由具体函数执行，返回响应数据
+//        response.setType(PacketType::UPLOAD_CHUNK);    // 设置数据头
+//        response.setJsonData(response_json);    // 设置 json子数据包
         return; // 执行数量过多，出于网络数据包考虑，不进行响应
     }
 
-    client_socket->write(response.toByteArray());  // 序列化后发射给客户端
 }
 
 // 链接断开

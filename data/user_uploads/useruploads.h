@@ -6,6 +6,7 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QJsonObject>
+#include <QByteArray>
 
 class UserUploads : public QObject
 {
@@ -16,7 +17,7 @@ public:
 
     void setDatabase(const QSqlDatabase &db);   // 初始化数据库
     // 处理切片上传文件
-    QJsonObject uploadChunk(QJsonObject request);
+    QJsonObject uploadChunk(QJsonObject request, QByteArray file_data);
     // 处理第一次上传的文件请求，返回生成的文件id
     QJsonObject handleInitialUploadRequest(QJsonObject request);
 

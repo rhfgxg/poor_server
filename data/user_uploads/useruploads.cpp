@@ -19,8 +19,7 @@ QJsonObject UserUploads::handleInitialUploadRequest(QJsonObject request)
   * 获取时间，用户，路径一起保存在数据库
   * 文件路径：date/用户名/年/月
   */
-    QJsonObject response;   // 相应数据
-    response["type"] = "INITIAL_UPLOAD";    // 响应数据类型
+    QJsonObject response;   // 响应数据的json子包
 
     QString file_id = QUuid::createUuid().toString(QUuid::WithoutBraces);   // 分配文件ID
     QString file_name = request["file_name"].toString(); // 客户端展示文件名
@@ -35,7 +34,7 @@ QJsonObject UserUploads::handleInitialUploadRequest(QJsonObject request)
     QDateTime currentDateTime = QDateTime::currentDateTime();
     QString upload_time = currentDateTime.toString("yyyy-MM-dd HH:mm:ss");   // 文件上传时间
 
-    const qint64 chunk_size = 1024 * 30; // 每个切片30kb：经过测试，在目前，30kb可以保持一个稳定的传输质量，切片传输时不会出现json解析异常
+    const qint64 chunk_size = 1024 * 1024; // 每个切片30kb：经过测试，在目前，30kb可以保持一个稳定的传输质量，切片传输时不会出现json解析异常
     int totalBlocks = (file_size + chunk_size - 1) / chunk_size; // 文件总块数
     QString missing_parts;  // 缺失文件块下标列表：保存数字0 1 2 3 n，使用空格分开，0表示第一块，乘切片大小得到偏移量
     for (int i = 0; i < totalBlocks; ++i)
@@ -195,17 +194,13 @@ QJsonObject UserUploads::handleInitialUploadRequest(QJsonObject request)
 }
 
 // 处理文件切片上传
-QJsonObject UserUploads::uploadChunk(QJsonObject request)
+QJsonObject UserUploads::uploadChunk(QJsonObject request, QByteArray file_data)
 {/*
   * 函数返回的数据不会响应给客户端：本函数执行过于频繁，每一条都响应会增加网络负担
   * 客户端获取文件上传状态：使用心跳机制（另一个函数）查询文件上传状态
   */
-    QJsonObject response;   // 响应数据
-    response["type"] = "UPLOAD_CHUNK";  // 响应数据类型
-
+    QJsonObject response;   // 响应数据的json子包
     QString file_id = request["file_id"].toString();    // 文件ID
-    QString base64_data = request["file_data"].toString();    // 文件块数据
-    QByteArray file_data = QByteArray::fromBase64(base64_data.toUtf8());    // 解码 base64数据
     qint64 offset = request["offset"].toInt();  // 文件块偏移量
 
     // 使用文件ID，查询需要的信息
