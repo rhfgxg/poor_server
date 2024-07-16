@@ -5,6 +5,7 @@
 #include <QDataStream>
 #include <QSqlError>
 #include <QFile>
+#include "../data/packet.h" // 自定义数据包
 
 ServerNetwork::ServerNetwork(const QSqlDatabase &db, QObject *parent) :
     QTcpServer(parent),
@@ -67,26 +68,17 @@ void ServerNetwork::onReadyRead()
 
     // 获取并解析客户端发送的数据
     QByteArray data = client_socket->readAll();
+    Packet request = Packet::fromByteArray(data);
 
-    // 将一个包含JSON数据的 data解析成一个 QJsonDocument对象
-    QJsonParseError parse_error;
-    QJsonDocument request_doc = QJsonDocument::fromJson(data, &parse_error);
-
-    if (parse_error.error != QJsonParseError::NoError)
-    {
-        qDebug() << "服务端套接字：上传数据的 JSON数据解析失败:" << parse_error.errorString();
-        return;
-    }
-
-    QJsonObject request = request_doc.object();  // 接收的数据 解析成 json对象
-    QJsonObject response;   // 服务端响应给客户端的数据
+    // 服务端响应给客户端的数据
+    Packet response;
 
 // 如果是新的链接
-    if (request["type"].toString() == "CONNECT")
-    {// todo：暂时由此函数执行，后续考虑由日志类处理，或转发 同类的log_connect函数
-        QHostAddress client_ip = client_socket->peerAddress();    // 获取客户端ip
-        QString client_ip_str = client_ip.toString();   // 将ip转QString
-        QString client_id = request["client_id"].toString();    // 客户端id
+    if (request.getType() == PacketType::CLIENT_CONNECT)
+    {/* todo：暂时由此函数执行，后续考虑由日志类处理，或转发 同类的log_connect函数 */
+        QString client_ip = client_socket->peerAddress().toString();   // 获取客户端ip然后转QString
+
+        QString client_id = request.getJsonData()["client_id"].toString();    // 客户端id：获取数据包中的json数据包的字段
 
         for (auto it = clients.begin(); it != clients.end(); ++it)  // 遍历套接字，找到目标套接字后，添加客户端id作为备注
         {
@@ -96,39 +88,44 @@ void ServerNetwork::onReadyRead()
                 clients[socket] = client_id;    // 添加客户端id作为备注
             }
         }
-        log_client_connect(client_id, client_ip_str, "connected"); // 添加链接日志
+        log_client_connect(client_id, client_ip, "connected"); // 添加链接日志
         return; // 无响应数据
     }
 // 如果是登录
-    else if (request["type"].toString() == "LOGIN")
+    else if (request.getType() == PacketType::LOGIN)
     {
         QString client_ip = client_socket->peerAddress().toString();
 
-        response = user_manager.validateUser(request, client_ip);  // 由具体函数执行，返回响应数据
+        QJsonObject response_json = user_manager.validateUser(request.getJsonData(), client_ip);  // 由具体函数执行，返回响应数据
+        response.setType(PacketType::LOGIN);    // 设置数据头
+        response.setJsonData(response_json);    // 设置 json子数据包
     }
 // 如果是注册
-    else if (request["type"].toString() == "RESISTER")
+    else if (request.getType() == PacketType::RESISTER)
     {
         QString client_ip = client_socket->peerAddress().toString();
 
-        response = user_manager.registerUser(request, client_ip);  // 由具体函数执行，返回响应数据
+        QJsonObject response_json = user_manager.registerUser(request.getJsonData(), client_ip);  // 由具体函数执行，返回响应数据
+        response.setType(PacketType::LOGIN);    // 设置数据头
+        response.setJsonData(response_json);    // 设置 json子数据包
     }
-// 如果的第一次上传文件
-    else if (request["type"].toString() == "INITIAL_UPLOAD")
+//// 如果的第一次上传文件
+    else if (request.getType() == PacketType::INITIAL_UPLOAD)
     {
-        response = user_uploads.handleInitialUploadRequest(request);  // 由具体函数执行，返回响应数据
+        QJsonObject response_json = user_uploads.handleInitialUploadRequest(request.getJsonData());  // 由具体函数执行，返回响应数据
+        response.setType(PacketType::LOGIN);    // 设置数据头
+        response.setJsonData(response_json);    // 设置 json子数据包
     }
-    // 如果是切片上传（断点续传）
-    else if (request["type"].toString() == "UPLOAD_CHUNK")
+//    // 如果是切片上传（断点续传）
+    else if (request.getType() == PacketType::UPLOAD_CHUNK)
     {
-        response = user_uploads.uploadChunk(request);  // 由具体函数执行，返回响应数据
+        QJsonObject response_json = user_uploads.uploadChunk(request.getJsonData());  // 由具体函数执行，返回响应数据
+        response.setType(PacketType::LOGIN);    // 设置数据头
+        response.setJsonData(response_json);    // 设置 json子数据包
         return; // 执行数量过多，出于网络数据包考虑，不进行响应
     }
 
-    // 序列化响应数据，发送给客户端
-    QJsonDocument response_doc(response);
-    QByteArray message = response_doc.toJson();
-    client_socket->write(message);  // 客户管理的发射函数
+    client_socket->write(response.toByteArray());  // 序列化后发射给客户端
 }
 
 // 链接断开
@@ -147,7 +144,7 @@ void ServerNetwork::onDisconnected()
             QTcpSocket* socket = it.key();  // 获取客户端链接列表的 键值对 的键：链接客户端的套接字
             if (client_socket == socket)
             {
-                client_id = clients[socket];    // 添加客户端id作为备注
+                client_id = clients[socket];    // 获取备注的客户端id
             }
         }
 
