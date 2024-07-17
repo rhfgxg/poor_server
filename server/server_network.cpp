@@ -5,7 +5,6 @@
 #include <QDataStream>
 #include <QSqlError>
 #include <QFile>
-#include "../data/packet.h" // 自定义数据包
 
 ServerNetwork::ServerNetwork(const QSqlDatabase &db, QObject *parent) :
     QTcpServer(parent),
@@ -46,13 +45,39 @@ void ServerNetwork::incomingConnection(qintptr socket_descriptor)
     clients[client_socket] = ""; // 备注：获取连接到此客户端套接字（即远程客户端）的 IP 地址
 }
 
+// 链接断开
+void ServerNetwork::onDisconnected()
+{
+    // 获取 发射信号激活此槽函数 的对象
+    QTcpSocket *client_socket = qobject_cast<QTcpSocket*>(sender());
+
+    if (client_socket)
+    {
+        QString client_ip_str = client_socket->peerAddress().toString();   // 获取客户端ip转QString
+
+        QString client_id;  // 客户端ID
+        for (auto it = clients.begin(); it != clients.end(); ++it)  // 遍历套接字列表，找到目标套接字后，获取备注的客户端id
+        {
+            QTcpSocket* socket = it.key();  // 获取客户端链接列表的 键值对 的键：链接客户端的套接字
+            if (client_socket == socket)
+            {
+                client_id = clients[socket];    // 获取备注的客户端id
+            }
+        }
+
+        log_client_connect(client_id, client_ip_str, "disconnected"); // 添加链接日志：断开
+
+        clients.remove(client_socket);   // 清理列表中的客户端
+        client_socket->deleteLater();    // 对象会在当前执行的代码块结束后，以及任何待处理的事件（如已排队的信号和槽）处理完毕后，适时被删除
+    }
+}
+
 // 读取服务器收到的数据
 void ServerNetwork::onReadyRead()
 {/* 只负责转发数据，不进行具体执行
   * 接收的数据：根据数据类型，将 json数据包 转发对应执行函数
   * 响应数据：接收执行函数返回的 json数据包，进行序列化后发送给客户端
   */
-    qDebug("服务端收到消息");
     // 获取 发射信号激活此槽函数 的对象
     QTcpSocket *client_socket = qobject_cast<QTcpSocket*>(sender());
     /* 因为使用了一个列表管理连接的所有客户端，所以无法确定是那个客户端关联的tcp对象发射的信号
@@ -60,21 +85,61 @@ void ServerNetwork::onReadyRead()
      * qobject_cast<QTcpSocket>(sender()) 如果sender()返回的对象是一个（或派生自）QTcpSocket类型的对象，这个转换就会成功，并返回指向那个QTcpSocket对象的指针。
      * 如果sender()不是期望的类型，该操作将返回nullptr，因此在使用转换结果前，通常需要检查是否为nullptr以避免程序崩溃。
      */
-
     if (!client_socket)
     {
         return;
     }
 
-    // 获取并解析客户端发送的数据
-    QByteArray data = client_socket->readAll();
-    Packet request = Packet::fromByteArray(data);
+    // 累积数据
+    // 将获取到的所有数据写入 套接字对应的元素
+//    incompleteData[client_socket].append(client_socket->readAll());
 
-    qDebug() << "收到的数据:" << data;
-    qDebug() << "解析后的请求类型:" << static_cast<int>(request.getType());
+    QDataStream stream(client_socket->readAll());
+    quint32 packet_size; // 数据包大小
+    stream >> packet_size;
+    qDebug() << packet_size;
 
-    // 服务端响应给客户端的数据
-    Packet response;
+    while (true)
+    {
+        // 检查是否有足够的数据读取长度前缀
+        if (incompleteData[client_socket].size() < sizeof(quint32))
+        {
+            qDebug("无法获取数据包长度");
+            return; // 等待更多数据
+        }
+
+        // 读取长度前缀
+        quint32 totalSize;
+        {
+            QDataStream sizeStream(incompleteData[client_socket]);
+            sizeStream >> totalSize;
+        }
+
+        // 检查是否有足够的数据读取整个包
+        if (incompleteData[client_socket].size() < totalSize)
+        {
+            qDebug() << "数据包长度不足" << totalSize;
+            return; // 等待更多数据
+        }
+        else
+        {
+            // 提取完整的数据包
+            QByteArray packetData = incompleteData[client_socket].mid(sizeof(quint32), totalSize - sizeof(quint32));
+            // 将数据从数据包列表中删除
+            incompleteData[client_socket].remove(0, totalSize);
+
+            // 解析数据包，然后发给处理客户端数据的函数
+            Packet request = Packet::fromByteArray(packetData);
+            handlePacket(client_socket, request);
+            break;
+        }
+    }
+}
+
+// 数据包处理（根据数据包类型进行转发，然后接收和发送响应数据）
+void ServerNetwork::handlePacket(QTcpSocket* client_socket, Packet request)
+{
+    Packet response;    // 响应数据包
 
 // 如果是新的链接
     if (request.getType() == PacketType::CLIENT_CONNECT)
@@ -91,7 +156,8 @@ void ServerNetwork::onReadyRead()
                 clients[socket] = client_id;    // 添加客户端id作为备注
             }
         }
-        log_client_connect(client_id, client_ip, "connected"); // 添加链接日志
+
+        log_client_connect(client_id, client_ip, "connected"); // 添加日志内容 和 此条日志的活动：connected
         return; // 无响应数据
     }
 // 如果是登录
@@ -133,33 +199,6 @@ void ServerNetwork::onReadyRead()
         return; // 执行数量过多，出于网络数据包考虑，不进行响应
     }
 
-}
-
-// 链接断开
-void ServerNetwork::onDisconnected()
-{
-    // 获取 发射信号激活此槽函数 的对象
-    QTcpSocket *client_socket = qobject_cast<QTcpSocket*>(sender());
-
-    if (client_socket)
-    {
-        QString client_ip_str = client_socket->peerAddress().toString();   // 获取客户端ip转QString
-
-        QString client_id;  // 客户端ID
-        for (auto it = clients.begin(); it != clients.end(); ++it)  // 遍历套接字列表，找到目标套接字后，获取备注的客户端id
-        {
-            QTcpSocket* socket = it.key();  // 获取客户端链接列表的 键值对 的键：链接客户端的套接字
-            if (client_socket == socket)
-            {
-                client_id = clients[socket];    // 获取备注的客户端id
-            }
-        }
-
-        log_client_connect(client_id, client_ip_str, "disconnected"); // 添加链接日志：断开
-
-        clients.remove(client_socket);   // 清理列表中的客户端
-        client_socket->deleteLater();    // 对象会在当前执行的代码块结束后，以及任何待处理的事件（如已排队的信号和槽）处理完毕后，适时被删除
-    }
 }
 
 // 客户端链接日志
