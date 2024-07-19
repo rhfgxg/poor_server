@@ -90,49 +90,41 @@ void ServerNetwork::onReadyRead()
         return;
     }
 
-    // 累积数据
-    // 将获取到的所有数据写入 套接字对应的元素
-//    incompleteData[client_socket].append(client_socket->readAll());
+    QByteArray byte_array = client_socket->readAll(); // 收到数据
 
-    QDataStream stream(client_socket->readAll());
-    quint32 packet_size; // 数据包大小
-    stream >> packet_size;
-    qDebug() << packet_size;
+    // 将收到的数据添加到缓冲区中
+    incompleteData[client_socket].append(byte_array);
 
     while (true)
     {
-        // 检查是否有足够的数据读取长度前缀
-        if (incompleteData[client_socket].size() < sizeof(quint32))
+        QByteArray &buffer = incompleteData[client_socket];
+
+        // 确认是否可以读取包头
+        if (buffer.size() < sizeof(quint32))
         {
-            qDebug("无法获取数据包长度");
-            return; // 等待更多数据
+            qDebug() << "数据包太短，不够读取大小";
+            break; // 数据不够，等待更多数据
         }
 
-        // 读取长度前缀
-        quint32 totalSize;
+        QDataStream stream(buffer); // 序列化工具
+        quint32 packet_size;    // 数据包大小
+        stream.readRawData(reinterpret_cast<char*>(&packet_size), sizeof(packet_size)); // 读取数据包大小
+
+        // 确认是否可以读取完整的数据包
+        if (buffer.size() < static_cast<int>(packet_size))
         {
-            QDataStream sizeStream(incompleteData[client_socket]);
-            sizeStream >> totalSize;
+            qDebug() << "数据头保存大小" << packet_size << "实际大小" << buffer.size();
+            break; // 数据不够，等待更多数据
         }
 
-        // 检查是否有足够的数据读取整个包
-        if (incompleteData[client_socket].size() < totalSize)
-        {
-            qDebug() << "数据包长度不足" << totalSize;
-            return; // 等待更多数据
-        }
-        else
-        {
-            // 提取完整的数据包
-            QByteArray packetData = incompleteData[client_socket].mid(sizeof(quint32), totalSize - sizeof(quint32));
-            // 将数据从数据包列表中删除
-            incompleteData[client_socket].remove(0, totalSize);
+        // 提取一个完整的数据包
+        QByteArray packet_data = buffer.mid(0, packet_size);
+        buffer.remove(0, packet_size);  // 清除数据包
 
-            // 解析数据包，然后发给处理客户端数据的函数
-            Packet request = Packet::fromByteArray(packetData);
-            handlePacket(client_socket, request);
-            break;
-        }
+        // 反序列化数据包，然后发给处理客户端数据的函数
+        Packet request = Packet::fromByteArray(packet_data);
+        handlePacket(client_socket, request);
+        break;
     }
 }
 
