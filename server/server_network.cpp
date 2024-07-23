@@ -186,9 +186,14 @@ void ServerNetwork::handlePacket(QTcpSocket* client_socket, Packet request)
         qDebug("文件切片");
         // 传入json数据包和文件数据
         QJsonObject response_json = user_uploads.uploadChunk(request.getJsonData(), request.getFileData());  // 由具体函数执行，返回响应数据
-//        response.setType(PacketType::UPLOAD_CHUNK);    // 设置数据头
-//        response.setJsonData(response_json);    // 设置 json子数据包
-        return; // 执行数量过多，出于网络数据包考虑，不进行响应
+        if (response_json.isEmpty())
+        {/* 执行次数过多，为了减少网络压力，不进行响应
+          * 每隔一段时间 响应一个上传结果，返回缺失的文件块下标，文件ID
+          */
+            return;
+        }
+        response.setType(PacketType::UPLOAD_CHUNK);    // 设置数据头
+        response.setJsonData(response_json);    // 设置 json子数据包
     }
 
 }
