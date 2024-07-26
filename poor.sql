@@ -2,14 +2,16 @@ use poor;	-- 进入数据库
 
 SHOW TABLES;	-- 查看可用表
 
-DROP table completed_files;	-- 删除表
+DROP table upload_status_files;	-- 删除表
 
-DELETE FROM upload_status_files;	-- 删除表内所有数据
+DELETE FROM completed_files;	-- 删除表内所有数据
 
-SELECT * from upload_status_files;	-- 查看表内数据
+SELECT * from completed_files;	-- 查看表内数据
 
 INSERT INTO users (username, password_hash, email) VALUES	-- 插入数据
 (`123`, `123`, `123`);
+
+-- varchar的最大长度为16383
 
 -- 用户信息表
 CREATE TABLE `users` (
@@ -61,18 +63,19 @@ CREATE TABLE `log_client_connection` (
 
 -- file上传 活动文件：记录所有上传中的文件，用于记录断点和缺失块，方便实现断点续传和文件完整
 CREATE TABLE `upload_status_files` (
-    `file_id` 		varchar(255),			-- 文件ID，外键
-    `account` 		VARCHAR(11) NOT NULL,	-- 用户账号
-    `client_id` 	varchar(45) NOT NULL,	-- 客户端ID，防止多客户端同时上传文件
-    `actual_file_path` VARCHAR(255) NOT NULL,	-- 文件在服务端存储路径
-    `file_size` 	BIGINT NOT NULL,	-- 文件总大小
+    `file_id` varchar(255), -- 文件ID，外键
+    `account` VARCHAR(11) NOT NULL, -- 用户账号
+    `client_id` varchar(45) NOT NULL, -- 客户端ID，防止多客户端同时上传文件
+	`file_path` VARCHAR(255) NOT NULL, -- 文件在客户端存储路径
+    `actual_file_path` VARCHAR(255) NOT NULL, -- 文件在服务端存储路径
+    `file_size` BIGINT NOT NULL, -- 文件总大小
     `last_upload_time` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,	-- 上次上传时间，用来标记断联时间
-    `missing_parts` TEXT,	-- 缺失的文件块，使用字符串保存数字列表 表示未上传的文件块，使用数字1~n，空格进行间隔
+    `missing_parts` VARCHAR(11000),	-- 缺失的文件块，使用位图，最大支持单个文件10gb：一串bool值保存，每个元素的下标表示一个文件块的下标，使用true表示已上传
     
-    PRIMARY KEY (`file_id`),	-- 主键
+    PRIMARY KEY (`file_id`), -- 主键
     
-    FOREIGN KEY (`file_id`) REFERENCES `completed_files`(`file_id`),	-- 外键：completed_files表 文件id
-	FOREIGN KEY (`account`) REFERENCES `users`(`account`)           	-- 外键：users表 用户id
+    FOREIGN KEY (`file_id`) REFERENCES `completed_files`(`file_id`), -- 外键：completed_files表 文件id
+	FOREIGN KEY (`account`) REFERENCES `users`(`account`) -- 外键：users表 用户id
 );
 
 -- 用户上传文件表：记录用户上传完成的文件

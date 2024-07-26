@@ -84,7 +84,6 @@ Packet Packet::fromByteArray(const QByteArray &byte_array)
     }
 
     QJsonObject json_object = json_doc.object();    // 转为json包
-    qDebug() << json_object;
 
     return Packet(type, json_object, file_data);
 }

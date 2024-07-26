@@ -90,16 +90,13 @@ void ServerNetwork::onReadyRead()
         return;
     }
 
-    QByteArray byte_array = client_socket->readAll(); // 收到数据
-
-    // 将收到的数据添加到缓冲区中
-    incompleteData[client_socket].append(byte_array);
+    incompleteData[client_socket].append(client_socket->readAll());   // 将收到的数据添加到缓冲区中
 
     while (true)
     {
-        QByteArray &buffer = incompleteData[client_socket];
+        QByteArray &buffer = incompleteData[client_socket]; // 取得收到的数据
 
-        // 确认是否可以读取包头
+        // 确认数据包大于4字节（足以保存数据包大小）
         if (buffer.size() < sizeof(quint32))
         {
             qDebug() << "数据包太短，不够读取大小";
@@ -113,31 +110,43 @@ void ServerNetwork::onReadyRead()
         // 确认是否可以读取完整的数据包
         if (buffer.size() < static_cast<int>(packet_size))
         {
-            qDebug() << "数据头保存大小" << packet_size << "实际大小" << buffer.size();
+            qDebug() << "数据包比预计的小：数据头保存大小" << packet_size << "实际大小" << buffer.size();
             break; // 数据不够，等待更多数据
         }
 
         // 提取一个完整的数据包
         QByteArray packet_data = buffer.mid(0, packet_size);
-        buffer.remove(0, packet_size);  // 清除数据包
+        buffer.remove(0, packet_size);  // 清除数据包占用空间
 
         // 反序列化数据包，然后发给处理客户端数据的函数
         Packet request = Packet::fromByteArray(packet_data);
         handlePacket(client_socket, request);
-        break;
+
+        // 如果缓冲区还有数据，需要继续处理
+        if (!buffer.isEmpty())
+        {/* tcp协议可能会发生粘包现象：前后两个数据包粘连成一个数据包发送过来
+          * 此时需要先处理前一个数据包，然后清除这个包的数据
+          * 然后处理第二个数据包（如果第二个包不完整，需要继续等待）
+          */
+            qDebug() << "发生了粘包";
+        }
+        else
+        {/* 没有剩余数据：结束循环 */
+            break;
+        }
     }
 }
 
 // 数据包处理（根据数据包类型进行转发，然后接收和发送响应数据）
 void ServerNetwork::handlePacket(QTcpSocket* client_socket, Packet request)
-{
+{/*参数：套接字，客户端发送的数据包*/
     Packet response;    // 响应数据包
 
-// 如果是新的链接
-    if (request.getType() == PacketType::CLIENT_CONNECT)
+    switch (request.getType())
+    {
+    case PacketType::CLIENT_CONNECT:    // 客户端链接日志
     {/* todo：暂时由此函数执行，后续考虑由日志类处理，或转发 同类的log_connect函数 */
         QString client_ip = client_socket->peerAddress().toString();   // 获取客户端ip然后转QString
-
         QString client_id = request.getJsonData()["client_id"].toString();    // 客户端id：获取数据包中的json数据包的字段
 
         for (auto it = clients.begin(); it != clients.end(); ++it)  // 遍历套接字，找到目标套接字后，添加客户端id作为备注
@@ -150,50 +159,70 @@ void ServerNetwork::handlePacket(QTcpSocket* client_socket, Packet request)
         }
 
         log_client_connect(client_id, client_ip, "connected"); // 添加日志内容 和 此条日志的活动：connected
-        return; // 无响应数据
+        break;  // 退出分支
     }
-// 如果是登录
-    else if (request.getType() == PacketType::LOGIN)
+    case PacketType::LOGIN: // 登录请求
     {
         QString client_ip = client_socket->peerAddress().toString();
 
         QJsonObject response_json = user_manager.validateUser(request.getJsonData(), client_ip);  // 由具体函数执行，返回响应数据
-        response.setType(PacketType::LOGIN);    // 设置数据头
+        response.setType(PacketType::LOGIN);    // 设置数据包类型
         response.setJsonData(response_json);    // 设置 json子数据包
         client_socket->write(response.toByteArray());  // 序列化后发射给客户端
+        break;  // 退出分支
     }
-// 如果是注册
-    else if (request.getType() == PacketType::RESISTER)
+    case PacketType::RESISTER:  // 注册请求
     {
         QString client_ip = client_socket->peerAddress().toString();
 
         QJsonObject response_json = user_manager.registerUser(request.getJsonData(), client_ip);  // 由具体函数执行，返回响应数据
-        response.setType(PacketType::RESISTER);    // 设置数据头
+        response.setType(PacketType::RESISTER);    // 设置数据包类型
         response.setJsonData(response_json);    // 设置 json子数据包
         client_socket->write(response.toByteArray());  // 序列化后发射给客户端
+        break;  // 退出分支
     }
-//// 如果的第一次上传文件
-    else if (request.getType() == PacketType::INITIAL_UPLOAD)
+    case PacketType::INITIAL_UPLOAD:    // 初始化上传文件任务
     {
         QJsonObject response_json = user_uploads.handleInitialUploadRequest(request.getJsonData());  // 由具体函数执行，返回响应数据
-        response.setType(PacketType::INITIAL_UPLOAD);    // 设置数据头
+        response.setType(PacketType::INITIAL_UPLOAD);    // 设置数据包类型
         response.setJsonData(response_json);    // 设置 json子数据包
         client_socket->write(response.toByteArray());  // 序列化后发射给客户端
+        break;  // 退出分支
+
     }
-//    // 如果是切片上传（断点续传）
-    else if (request.getType() == PacketType::UPLOAD_CHUNK)
+    case PacketType::UPLOAD_CHUNK:  // 切片上传 或 断点续传
     {
-        qDebug("文件切片");
         // 传入json数据包和文件数据
         QJsonObject response_json = user_uploads.uploadChunk(request.getJsonData(), request.getFileData());  // 由具体函数执行，返回响应数据
-        if (response_json.isEmpty())
-        {/* 执行次数过多，为了减少网络压力，不进行响应
-          * 每隔一段时间 响应一个上传结果，返回缺失的文件块下标，文件ID
-          */
-            return;
-        }
-        response.setType(PacketType::UPLOAD_CHUNK);    // 设置数据头
+//        response.setType(PacketType::UPLOAD_CHUNK);    // 设置数据包类型
+//        response.setJsonData(response_json);    // 设置 json子数据包
+//        client_socket->write(response.toByteArray());  // 序列化后发射给客户端
+        break;  // 退出分支
+
+    }
+    case PacketType::UPLOAD_COMPLETE:   // 请求检查文件上传结果
+    {
+        QJsonObject response_json = user_uploads.checkFileCompletion(request.getJsonData());
+        response.setType(PacketType::UPLOAD_COMPLETE);    // 设置数据包类型
         response.setJsonData(response_json);    // 设置 json子数据包
+        client_socket->write(response.toByteArray());  // 序列化后发射给客户端
+        break;  // 退出分支
+
+    }
+    default:    // 其他请求
+    {// 处理上传的异常数据
+        response.setType(PacketType::OTHER);    // 设置数据包类型
+
+        QJsonObject response_json;   // 响应数据的json子包
+        response_json["status"] = "hello";
+        response_json["message"] = "请不要使用抓包工具乱改上传数据包";
+        response.setJsonData(response_json);    // 设置 json子数据包
+
+        client_socket->write(response.toByteArray());  // 序列化后发射给客户端
+        break;  // 退出分支
+
+    }
+
     }
 
 }
